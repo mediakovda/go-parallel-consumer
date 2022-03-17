@@ -3,9 +3,9 @@ package workers
 import (
 	"context"
 	"fmt"
-	"mediakov/parcon/parallel/internal/hashmap"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/hashmap"
 )
 
 // partitionWorker handles processing of messages from one partition.

@@ -18,10 +18,10 @@ package parallel
 
 import (
 	"context"
-	"mediakov/parcon/parallel/internal/limiter"
-	"mediakov/parcon/parallel/internal/workers"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/limiter"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/workers"
 )
 
 // Processor is the function that will be used to process the messages.

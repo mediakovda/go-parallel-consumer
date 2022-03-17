@@ -3,10 +3,10 @@ package workers
 import (
 	"context"
 	"hash/crc32"
-	"mediakov/parcon/parallel/internal/hashmap"
 	"sync"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/hashmap"
 )
 
 type Processor = func(ctx context.Context, m *kafka.Message)

@@ -1,4 +1,4 @@
-module mediakov/parcon
+module github.com/mediakovda/go-parallel-consumer
 
 go 1.17
 

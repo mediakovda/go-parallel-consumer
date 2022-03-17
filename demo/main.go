@@ -5,13 +5,13 @@ import (
 	"flag"
 	"log"
 	"math/rand"
-	"mediakov/parcon/parallel"
 	"os"
 	"os/signal"
 	"sync/atomic"
 	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel"
 )
 
 var (
