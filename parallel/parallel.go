@@ -78,56 +78,59 @@ func newConsumer(consumer kconsumerProvider, conf *Config) (*Consumer, error) {
 // Run starts reading messages from topics and processing them.
 //
 // Blocks until ctx is done.
+//                           ┌─────┐
+//  ┌────────┐ ---events---> │limit│ ---events---> ┌─────────┐
+//  │Consumer│               └─────┘ <--processed- │scheduler│
+//  └────────┘ <------------------------offsets--- └─────────┘
 func (c *Consumer) Run(ctx context.Context, topics []string, f Processor) error {
 	kc, err := c.kconsumer(topics)
 	if err != nil {
 		return err
 	}
-
-	poller, err := newKafkaPoller(ctx, kc, topics, c.config)
+	poller, err := newKafkaPoller(kc, topics, c.config)
 	if err != nil {
 		return err
 	}
+	pollerStopped := make(chan error, 1)
+	go func() {
+		err := poller.Run(ctx)
+		if err != nil {
+			pollerStopped <- err
+		}
+		close(pollerStopped)
+	}()
 
 	scheduler := workers.NewScheduler(ctx, f)
 
-	finished := make(chan struct{}, 2)
-	go func() {
-		poller.Run()
-		finished <- struct{}{}
-	}()
-
 	events := poller.Events()
-	events = limit(ctx, events, scheduler.Done(), c.config.MaxMessages, c.config.MaxMessagesByte)
+	events = limit(events, scheduler.Processed(), c.config.MaxMessages, c.config.MaxMessagesByte)
 
+	schedulerStopped := make(chan struct{})
 	go func() {
 		scheduler.Run(events)
-		finished <- struct{}{}
+		close(schedulerStopped)
 	}()
 
-	go pipeOffsets(ctx, scheduler.Offsets(), poller.Offsets())
+	offsetsStopped := make(chan struct{})
+	go func() {
+		poller.RunOffsets(scheduler.Offsets())
+		close(offsetsStopped)
+	}()
 
-	<-finished
-	<-finished
+	<-pollerStopped
+	err = kc.Close()
+	<-schedulerStopped
+	<-offsetsStopped
 
-	return nil
+	return err
 }
 
-func pipeOffsets(ctx context.Context, in <-chan kafka.TopicPartition, out chan<- kafka.TopicPartition) {
-	for o := range in {
-		select {
-		case out <- o:
-		case <-ctx.Done():
-		}
-	}
-}
-
-func limit(ctx context.Context, input <-chan kafka.Event, done <-chan *kafka.Message, countLimit, sizeLimit int) (output <-chan kafka.Event) {
+func limit(input <-chan kafka.Event, processed <-chan *kafka.Message, countLimit, sizeLimit int) (output <-chan kafka.Event) {
 	out := make(chan kafka.Event)
 	l := limiter.New(countLimit, sizeLimit)
 
 	go func() {
-		for m := range done {
+		for m := range processed {
 			l.Remove(m)
 		}
 	}()
@@ -139,13 +142,11 @@ func limit(ctx context.Context, input <-chan kafka.Event, done <-chan *kafka.Mes
 				l.Add(m)
 			}
 
-			select {
-			case out <- e:
-			case <-ctx.Done():
-			}
+			out <- e
 
 			l.Limit()
 		}
+		close(out)
 	}()
 
 	return out

@@ -39,29 +39,21 @@ func (s *Scheduler) Offsets() <-chan kafka.TopicPartition {
 	return s.offsets
 }
 
-// Done returns channel with messages that are completely finished processing.
-func (s *Scheduler) Done() <-chan *kafka.Message {
+// Processed returns channel with messages that are completely finished processing.
+func (s *Scheduler) Processed() <-chan *kafka.Message {
 	return s.done
 }
 
 func (s *Scheduler) Run(events <-chan kafka.Event) {
-
-loop:
-	for {
-		select {
-		case event := <-events:
-			switch e := event.(type) {
-			case kafka.AssignedPartitions:
-				s.handleAssign(e)
-			case kafka.RevokedPartitions:
-				s.handleRevoke(e)
-			case *kafka.Message:
-				s.handleMessage(e)
-			default:
-			}
-
-		case <-s.context.Done():
-			break loop
+	for event := range events {
+		switch e := event.(type) {
+		case kafka.AssignedPartitions:
+			s.handleAssign(e)
+		case kafka.RevokedPartitions:
+			s.handleRevoke(e)
+		case *kafka.Message:
+			s.handleMessage(e)
+		default:
 		}
 	}
 

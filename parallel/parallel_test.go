@@ -141,6 +141,10 @@ func (c *simpleConsumer) StoreOffsets(offsets []kafka.TopicPartition) (storedOff
 	return nil, nil
 }
 
+func (c *simpleConsumer) Assignment() (partitions []kafka.TopicPartition, err error) {
+	return []kafka.TopicPartition{}, nil
+}
+
 func (c *simpleConsumer) SubscribeTopics(topics []string, rebalanceCb kafka.RebalanceCb) (err error) {
 	return nil
 }
@@ -148,6 +152,9 @@ func (c *simpleConsumer) IncrementalAssign(partitions []kafka.TopicPartition) (e
 	return nil
 }
 func (c *simpleConsumer) IncrementalUnassign(partitions []kafka.TopicPartition) (err error) {
+	return nil
+}
+func (c *simpleConsumer) Unsubscribe() (err error) {
 	return nil
 }
 func (c *simpleConsumer) Close() (err error) {
