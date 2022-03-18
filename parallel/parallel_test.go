@@ -66,6 +66,23 @@ func BenchmarkConsumer(b *testing.B) {
 	<-simple.Finished
 }
 
+func TestConsumerRunsOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	consumer, err := consumerFromSimpleConsumer(newSimpleConsumer(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	consumer.Run(ctx, nil, func(ctx context.Context, m *kafka.Message) {})
+
+	err = consumer.Run(ctx, nil, func(ctx context.Context, m *kafka.Message) {})
+	if err == nil || err.Error() != "Consumer.Run should be called only once" {
+		t.Errorf("runned Consumer.Run second time, you should be able to run it only once")
+	}
+}
+
 func consumerFromSimpleConsumer(s *simpleConsumer) (*Consumer, error) {
 	consumerProvider := func(topics []string) (kafkaConsumer, error) {
 		return s, nil

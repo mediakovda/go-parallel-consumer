@@ -18,6 +18,8 @@ package parallel
 
 import (
 	"context"
+	"fmt"
+	"sync"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/mediakovda/go-parallel-consumer/parallel/internal/limiter"
@@ -34,6 +36,9 @@ type Consumer struct {
 	config *Config
 
 	kconsumer kconsumerProvider
+
+	mutex  sync.Mutex
+	runned bool
 }
 
 type kconsumerProvider func(topics []string) (kafkaConsumer, error)
@@ -77,12 +82,19 @@ func newConsumer(consumer kconsumerProvider, conf *Config) (*Consumer, error) {
 
 // Run starts reading messages from topics and processing them.
 //
-// Blocks until ctx is done.
+// Should be called only once. Blocks until ctx is done.
 //                           ┌─────┐
 //  ┌────────┐ ---events---> │limit│ ---events---> ┌─────────┐
 //  │Consumer│               └─────┘ <--processed- │scheduler│
 //  └────────┘ <------------------------offsets--- └─────────┘
 func (c *Consumer) Run(ctx context.Context, topics []string, f Processor) error {
+	c.mutex.Lock()
+	if c.runned {
+		return fmt.Errorf("Consumer.Run should be called only once")
+	}
+	c.runned = true
+	c.mutex.Unlock()
+
 	kc, err := c.kconsumer(topics)
 	if err != nil {
 		return err
