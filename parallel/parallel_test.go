@@ -50,16 +50,8 @@ func ExampleConsumer() {
 }
 
 func BenchmarkConsumer(b *testing.B) {
-	consumer := newSimpleConsumer(b.N)
-	consumerProvider := func(topics []string) (kafkaConsumer, error) {
-		return consumer, nil
-	}
-	processor := func(ctx context.Context, m *kafka.Message) {}
-	config := &ConsumerDefaultConfig
-	config.MaxMessages = math.MaxInt64
-	config.MaxMessagesByte = math.MaxInt64
-
-	c, err := newConsumer(consumerProvider, config)
+	simple := newSimpleConsumer(b.N)
+	consumer, err := consumerFromSimpleConsumer(simple)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -67,9 +59,27 @@ func BenchmarkConsumer(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go c.Run(ctx, []string{}, processor)
+	processor := func(ctx context.Context, m *kafka.Message) {}
 
-	<-consumer.Finished
+	go consumer.Run(ctx, []string{}, processor)
+
+	<-simple.Finished
+}
+
+func consumerFromSimpleConsumer(s *simpleConsumer) (*Consumer, error) {
+	consumerProvider := func(topics []string) (kafkaConsumer, error) {
+		return s, nil
+	}
+	config := &ConsumerDefaultConfig
+	config.MaxMessages = math.MaxInt64
+	config.MaxMessagesByte = math.MaxInt64
+
+	c, err := newConsumer(consumerProvider, config)
+	if err != nil {
+		return nil, err
+	}
+
+	return c, nil
 }
 
 var topic = "topic"
