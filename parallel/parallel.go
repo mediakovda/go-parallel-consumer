@@ -112,8 +112,9 @@ func (c *Consumer) Run(ctx context.Context, topics []string, f Processor) error 
 
 	scheduler := workers.NewScheduler(ctx, f)
 
+	limit := limiter.New(limiter.Limits{MaxMessages: c.config.MaxMessages, MaxBytes: c.config.MaxMessagesByte})
 	events := poller.Events()
-	events = limit(events, scheduler.Processed(), c.config.MaxMessages, c.config.MaxMessagesByte)
+	events = limit.Start(events, scheduler.Processed())
 
 	schedulerStopped := make(chan struct{})
 	go func() {
@@ -133,31 +134,4 @@ func (c *Consumer) Run(ctx context.Context, topics []string, f Processor) error 
 	<-offsetsStopped
 
 	return err
-}
-
-func limit(input <-chan kafka.Event, processed <-chan *kafka.Message, countLimit, sizeLimit int) (output <-chan kafka.Event) {
-	out := make(chan kafka.Event)
-	l := limiter.New(countLimit, sizeLimit)
-
-	go func() {
-		for m := range processed {
-			l.Remove(m)
-		}
-	}()
-
-	go func() {
-		for e := range input {
-			m, ok := e.(*kafka.Message)
-			if ok {
-				l.Add(m)
-			}
-
-			out <- e
-
-			l.Limit()
-		}
-		close(out)
-	}()
-
-	return out
 }
