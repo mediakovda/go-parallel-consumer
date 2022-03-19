@@ -82,5 +82,10 @@ func (l *Limiter) limited() bool {
 
 func messageSize(m *kafka.Message) int {
 	size := len(m.Key) + len(m.Value)
+
+	for i := range m.Headers {
+		size += len(m.Headers[i].Key) + len(m.Headers[i].Value)
+	}
+
 	return size
 }

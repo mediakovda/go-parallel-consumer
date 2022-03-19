@@ -58,3 +58,23 @@ func TestLimiterMessageBytes(t *testing.T) {
 		t.Errorf("no message, want one")
 	}
 }
+
+func TestMessageSize(t *testing.T) {
+	m := &kafka.Message{
+		Headers: []kafka.Header{{Key: "h", Value: make([]byte, 10)}},
+		Key:     make([]byte, 100),
+		Value:   make([]byte, 1000),
+	}
+
+	size := messageSize(m)
+	if size != 1111 {
+		t.Errorf("message size = %d, want 1111", size)
+	}
+
+	m = &kafka.Message{}
+
+	size = messageSize(m)
+	if size != 0 {
+		t.Errorf("message size = %d, want 0", size)
+	}
+}
