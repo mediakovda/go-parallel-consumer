@@ -19,7 +19,7 @@ package parallel
 import (
 	"context"
 	"fmt"
-	"sync"
+	"sync/atomic"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/mediakovda/go-parallel-consumer/parallel/internal/limiter"
@@ -37,8 +37,7 @@ type Consumer struct {
 
 	kconsumer kconsumerProvider
 
-	mutex  sync.Mutex
-	runned bool
+	runned int32
 }
 
 type kconsumerProvider func(topics []string) (kafkaConsumer, error)
@@ -83,17 +82,16 @@ func newConsumer(consumer kconsumerProvider, conf *Config) (*Consumer, error) {
 // Run starts reading messages from topics and processing them.
 //
 // Should be called only once. Blocks until ctx is done.
-//                           ┌─────┐
-//  ┌────────┐ ---events---> │limit│ ---events---> ┌─────────┐
-//  │Consumer│               └─────┘ <--processed- │scheduler│
-//  └────────┘ <------------------------offsets--- └─────────┘
 func (c *Consumer) Run(ctx context.Context, topics []string, f Processor) error {
-	c.mutex.Lock()
-	if c.runned {
+	runned := atomic.SwapInt32(&c.runned, 1)
+	if runned == 1 {
 		return fmt.Errorf("Consumer.Run should be called only once")
 	}
-	c.runned = true
-	c.mutex.Unlock()
+
+	//                           ┌─────┐
+	//  ┌────────┐ ---events---> │limit│ ---events---> ┌─────────┐
+	//  │Consumer│               └─────┘ <--processed- │scheduler│
+	//  └────────┘ <------------------------offsets--- └─────────┘
 
 	kc, err := c.kconsumer(topics)
 	if err != nil {
