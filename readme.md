@@ -8,7 +8,7 @@ func messageProcessor(ctx context.Context, m *kafka.Message) {
 var consumer parallel.Consumer
 // ...
 
-go consumer.Run(ctx, topics, messageProcessor)
+go consumer.Run(ctx, topics, messageProcessor, limiter)
 ```
 
 Process concurrently hundreds and thousands messages from topic without regard to the number of partitions.
@@ -64,3 +64,25 @@ Currently, if partition is revoked, all work on uncommited offsets going to be r
 ■ ■ □ x □ x    another consumer has to repeat work on 3 and 5
 
 ```
+
+## Limits
+
+You can limit number and size of messages currently processed by one or multiple Consumers with limiter.
+
+```go
+var c0, c1 parallel.Consumer
+// ...
+
+limiter := parallel.NewLimiter(parallel.Limits{
+    MaxMessages: 100,
+    MaxBytes:    100 * 1024 * 1024,
+})
+
+go c0.Run(ctx, topics0, processor, limiter)
+go c1.Run(ctx, topics1, processor, limiter)
+```
+
+Limits are shared between consumers.
+
+For example, if one consumer has used 90% of the resources, then
+only 10% is available to the other consumer.

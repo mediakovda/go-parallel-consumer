@@ -23,8 +23,8 @@ var (
 	shouldConsume = false
 	groupId       = "example"
 	pdelay        = int(time.Second / time.Millisecond)
-	maxMessages   = parallel.ConsumerDefaultConfig.MaxMessages
-	maxBytes      = parallel.ConsumerDefaultConfig.MaxMessagesByte
+	maxMessages   = 100
+	maxBytes      = 100 * 1024 * 1024
 )
 
 var (
@@ -89,8 +89,10 @@ func consume() {
 	}
 
 	config := parallel.ConsumerDefaultConfig
-	config.MaxMessages = maxMessages
-	config.MaxMessagesByte = maxBytes
+	limiter := parallel.NewLimiter(parallel.Limits{
+		MaxMessages: 100,
+		MaxBytes:    100 * 1024 * 1024,
+	})
 
 	kafkaConfig := &kafka.ConfigMap{
 		"bootstrap.servers":             bootstrap,
@@ -105,7 +107,7 @@ func consume() {
 		log.Fatal(err)
 	}
 
-	err = c.Run(ctx, []string{topic}, processor)
+	err = c.Run(ctx, []string{topic}, processor, limiter)
 	if err != nil {
 		log.Fatal(err)
 	}

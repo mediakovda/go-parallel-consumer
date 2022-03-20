@@ -25,6 +25,14 @@ func New(limits Limits) *Limiter {
 	}
 }
 
+func (l *Limiter) SetLimits(limits Limits) {
+	l.cond.L.Lock()
+	defer l.cond.L.Unlock()
+
+	l.limits.MaxMessages = limits.MaxMessages
+	l.limits.MaxBytes = limits.MaxBytes
+}
+
 func (l *Limiter) Start(input <-chan kafka.Event, processed <-chan *kafka.Message) (output <-chan kafka.Event) {
 	out := make(chan kafka.Event)
 
@@ -37,7 +45,9 @@ func (l *Limiter) Start(input <-chan kafka.Event, processed <-chan *kafka.Messag
 
 			out <- e
 
-			l.Limit()
+			if ok {
+				l.Limit()
+			}
 		}
 		close(out)
 	}()

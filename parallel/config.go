@@ -11,12 +11,6 @@ import (
 type Config struct {
 	PollTimeoutMs int
 
-	// MaxMessages is the maximum number of messages in memory that are not finished processing.
-	MaxMessages int
-
-	// MaxMessagesByte is the maximum size of messages in memory that are not finished processing.
-	MaxMessagesByte int
-
 	Logger *log.Logger
 }
 
@@ -24,24 +18,14 @@ type Config struct {
 //
 // See consumer.Config.
 var ConsumerDefaultConfig = Config{
-	PollTimeoutMs:   100,
-	MaxMessages:     100,
-	MaxMessagesByte: 100 * 1024 * 1024,
-	Logger:          log.New(os.Stderr, "", log.LstdFlags),
+	PollTimeoutMs: 100,
+	Logger:        log.New(os.Stderr, "", log.LstdFlags),
 }
 
 // Verify verifies config.
 func (c *Config) Verify() error {
 	if c.PollTimeoutMs < 0 {
 		return fmt.Errorf("Config.PollTimeoutMs can't be less than 0")
-	}
-
-	if c.MaxMessages <= 0 {
-		return fmt.Errorf("Config.MaxMessage can't be less than 1")
-	}
-
-	if c.MaxMessagesByte <= 1 {
-		return fmt.Errorf("Config.MaxMessagesByte can't be less than 1")
 	}
 
 	if c.Logger == nil {

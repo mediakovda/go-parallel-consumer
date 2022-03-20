@@ -3,7 +3,6 @@ package parallel
 import (
 	"context"
 	"log"
-	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -24,9 +23,12 @@ func ExampleConsumer() {
 	}
 
 	config := ConsumerDefaultConfig
-	// set's limits on number and size of messages processed by consumer
-	config.MaxMessages = config.MaxMessages
-	config.MaxMessagesByte = config.MaxMessagesByte
+
+	// limits number and size of messages processed by consumer
+	limiter := NewLimiter(Limits{
+		MaxMessages: 100,
+		MaxBytes:    100 * 1024 * 1024,
+	})
 
 	kafkaConfig := &kafka.ConfigMap{
 		"bootstrap.servers":             "localhost:9092",
@@ -43,7 +45,7 @@ func ExampleConsumer() {
 		log.Fatal(err)
 	}
 
-	err = c.Run(ctx, []string{topic}, processor)
+	err = c.Run(ctx, []string{topic}, processor, limiter)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,7 +63,7 @@ func BenchmarkConsumer(b *testing.B) {
 
 	processor := func(ctx context.Context, m *kafka.Message) {}
 
-	go consumer.Run(ctx, []string{}, processor)
+	go consumer.Run(ctx, []string{}, processor, NewLimiter(NoLimits))
 
 	<-simple.Finished
 }
@@ -75,9 +77,9 @@ func TestConsumerRunsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	consumer.Run(ctx, nil, func(ctx context.Context, m *kafka.Message) {})
+	consumer.Run(ctx, nil, func(ctx context.Context, m *kafka.Message) {}, NewLimiter(NoLimits))
 
-	err = consumer.Run(ctx, nil, func(ctx context.Context, m *kafka.Message) {})
+	err = consumer.Run(ctx, nil, func(ctx context.Context, m *kafka.Message) {}, NewLimiter(NoLimits))
 	if err == nil || err.Error() != "Consumer.Run should be called only once" {
 		t.Errorf("runned Consumer.Run second time, you should be able to run it only once")
 	}
@@ -88,8 +90,6 @@ func consumerFromSimpleConsumer(s *simpleConsumer) (*Consumer, error) {
 		return s, nil
 	}
 	config := &ConsumerDefaultConfig
-	config.MaxMessages = math.MaxInt64
-	config.MaxMessagesByte = math.MaxInt64
 
 	c, err := newConsumer(consumerProvider, config)
 	if err != nil {

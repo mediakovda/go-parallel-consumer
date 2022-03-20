@@ -22,7 +22,6 @@ import (
 	"sync/atomic"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
-	"github.com/mediakovda/go-parallel-consumer/parallel/internal/limiter"
 	"github.com/mediakovda/go-parallel-consumer/parallel/internal/workers"
 )
 
@@ -82,7 +81,7 @@ func newConsumer(consumer kconsumerProvider, conf *Config) (*Consumer, error) {
 // Run starts reading messages from topics and processing them.
 //
 // Should be called only once. Blocks until ctx is done.
-func (c *Consumer) Run(ctx context.Context, topics []string, f Processor) error {
+func (c *Consumer) Run(ctx context.Context, topics []string, f Processor, limiter Limiter) error {
 	runned := atomic.SwapInt32(&c.runned, 1)
 	if runned == 1 {
 		return fmt.Errorf("Consumer.Run should be called only once")
@@ -112,9 +111,8 @@ func (c *Consumer) Run(ctx context.Context, topics []string, f Processor) error 
 
 	scheduler := workers.NewScheduler(ctx, f)
 
-	limit := limiter.New(limiter.Limits{MaxMessages: c.config.MaxMessages, MaxBytes: c.config.MaxMessagesByte})
 	events := poller.Events()
-	events = limit.Start(events, scheduler.Processed())
+	events = limiter.limit(events, scheduler.Processed())
 
 	schedulerStopped := make(chan struct{})
 	go func() {
