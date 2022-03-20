@@ -6,25 +6,25 @@ import (
 	"fmt"
 	"hash/crc32"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/events"
 )
 
 // job is auxiliary structure for partitionWorker.
 type job struct {
 	key      *jobKey
-	current  *kafka.Message
+	current  *events.Message
 	err      error
-	attached []*kafka.Message
+	attached []*events.Message
 }
 
-func newJob(k *jobKey, m *kafka.Message) *job {
+func newJob(k *jobKey, m *events.Message) *job {
 	return &job{
 		key:     k,
 		current: m,
 	}
 }
 
-func (j *job) attach(m *kafka.Message) {
+func (j *job) attach(m *events.Message) {
 	j.attached = append(j.attached, m)
 }
 

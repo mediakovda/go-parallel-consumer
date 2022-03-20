@@ -3,7 +3,7 @@ package limiter
 import (
 	"sync"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/events"
 )
 
 type Limiter struct {
@@ -33,12 +33,12 @@ func (l *Limiter) SetLimits(limits Limits) {
 	l.limits.MaxBytes = limits.MaxBytes
 }
 
-func (l *Limiter) Start(input <-chan kafka.Event, processed <-chan *kafka.Message) (output <-chan kafka.Event) {
-	out := make(chan kafka.Event)
+func (l *Limiter) Start(input <-chan events.Event, processed <-chan *events.Message) (output <-chan events.Event) {
+	out := make(chan events.Event)
 
 	go func() {
 		for e := range input {
-			m, ok := e.(*kafka.Message)
+			m, ok := e.(*events.Message)
 			if ok {
 				l.Add(m)
 			}
@@ -61,14 +61,14 @@ func (l *Limiter) Start(input <-chan kafka.Event, processed <-chan *kafka.Messag
 	return out
 }
 
-func (l *Limiter) Add(m *kafka.Message) {
+func (l *Limiter) Add(m *events.Message) {
 	l.cond.L.Lock()
 	l.messages += 1
 	l.bytes += messageSize(m)
 	l.cond.L.Unlock()
 }
 
-func (l *Limiter) Remove(m *kafka.Message) {
+func (l *Limiter) Remove(m *events.Message) {
 	l.cond.L.Lock()
 	l.messages -= 1
 	l.bytes -= messageSize(m)
@@ -90,7 +90,7 @@ func (l *Limiter) limited() bool {
 		l.bytes >= l.limits.MaxBytes
 }
 
-func messageSize(m *kafka.Message) int {
+func messageSize(m *events.Message) int {
 	size := len(m.Key) + len(m.Value)
 
 	for i := range m.Headers {

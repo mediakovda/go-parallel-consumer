@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/events"
 )
 
 // TestPartitionWorkerDone tests all received messages returned through .done channel
@@ -14,9 +14,9 @@ func TestPartitionWorkerDone(t *testing.T) {
 	n := 999
 	w := newTestPartitionWorker(n)
 
-	done := make(chan *kafka.Message, n)
+	done := make(chan *events.Message, n)
 	w.done = done
-	w.processor = func(ctx context.Context, m *kafka.Message) {
+	w.processor = func(ctx context.Context, m *events.Message) {
 		if rand.Float64() < 0.33 {
 			// for this test we want some of them to stuck in unprocessed state
 			<-ctx.Done()
@@ -39,8 +39,8 @@ func TestOffsets(t *testing.T) {
 	n := 999
 	w := newTestPartitionWorker(n)
 
-	done := make(chan *kafka.Message, n)
-	offsets := make(chan kafka.TopicPartition, n)
+	done := make(chan *events.Message, n)
+	offsets := make(chan events.OffsetUpdate, n)
 	w.done = done
 	w.offsets = offsets
 
@@ -48,7 +48,7 @@ func TestOffsets(t *testing.T) {
 	readMessages(done, n, time.Second)
 
 	close(w.offsets)
-	var lastOffset kafka.TopicPartition
+	var lastOffset events.OffsetUpdate
 	for lastOffset = range offsets {
 	}
 
@@ -64,15 +64,15 @@ func TestSameKey(t *testing.T) {
 	w := newPartition(
 		context.Background(),
 		&partitionParams{
-			Messages: make(chan *kafka.Message, n),
-			Processor: func(ctx context.Context, m *kafka.Message) {
+			Messages: make(chan *events.Message, n),
+			Processor: func(ctx context.Context, m *events.Message) {
 				<-ctx.Done()
 			},
-			Offsets: make(chan<- kafka.TopicPartition, n),
-			Done:    make(chan<- *kafka.Message, n),
+			Offsets: make(chan<- events.OffsetUpdate, n),
+			Done:    make(chan<- *events.Message, n),
 		})
 
-	m := &kafka.Message{Key: []byte{1}}
+	m := &events.Message{Key: []byte{1}}
 
 	for i := 0; i < n; i++ {
 		w.handleMessage(m)
@@ -91,20 +91,20 @@ func TestSameKey(t *testing.T) {
 
 func TestEmptyKey(t *testing.T) {
 	n := 99
-	processing := make(chan *kafka.Message, n)
+	processing := make(chan *events.Message, n)
 	w := newPartition(
 		context.Background(),
 		&partitionParams{
-			Messages: make(chan *kafka.Message, n),
-			Processor: func(ctx context.Context, m *kafka.Message) {
+			Messages: make(chan *events.Message, n),
+			Processor: func(ctx context.Context, m *events.Message) {
 				processing <- m
 				<-ctx.Done()
 			},
-			Offsets: make(chan<- kafka.TopicPartition, n),
-			Done:    make(chan<- *kafka.Message, n),
+			Offsets: make(chan<- events.OffsetUpdate, n),
+			Done:    make(chan<- *events.Message, n),
 		})
 
-	m := &kafka.Message{Key: nil}
+	m := &events.Message{Key: nil}
 
 	for i := 0; i < n; i++ {
 		w.handleMessage(m)
@@ -124,16 +124,16 @@ func newTestPartitionWorker(n int) *partitionWorker {
 	w := newPartition(
 		context.Background(),
 		&partitionParams{
-			Messages:  make(chan *kafka.Message, n),
-			Processor: func(ctx context.Context, m *kafka.Message) {},
-			Offsets:   make(chan<- kafka.TopicPartition, n),
-			Done:      make(chan<- *kafka.Message, n),
+			Messages:  make(chan *events.Message, n),
+			Processor: func(ctx context.Context, m *events.Message) {},
+			Offsets:   make(chan<- events.OffsetUpdate, n),
+			Done:      make(chan<- *events.Message, n),
 		})
 	w.jobDone = make(chan *job, n)
 
 	for i := 0; i < n; i++ {
-		m := &kafka.Message{}
-		m.TopicPartition = kafka.TopicPartition{Offset: kafka.Offset(i)}
+		m := &events.Message{}
+		m.Offset = int64(i)
 		if rand.Float64() < 0.8 {
 			m.Key = []byte{byte(rand.Intn(5))}
 		}
@@ -155,8 +155,8 @@ func ensureAllMessagesConsumed(w *partitionWorker) {
 	}
 }
 
-func readMessages(messages <-chan *kafka.Message, n int, t time.Duration) []*kafka.Message {
-	result := make([]*kafka.Message, 0)
+func readMessages(messages <-chan *events.Message, n int, t time.Duration) []*events.Message {
+	result := make([]*events.Message, 0)
 
 loop:
 	for n > 0 {

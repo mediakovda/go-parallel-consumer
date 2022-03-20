@@ -22,13 +22,14 @@ import (
 	"sync/atomic"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/events"
 	"github.com/mediakovda/go-parallel-consumer/parallel/internal/workers"
 )
 
 // Processor is the function that will be used to process the messages.
 //
 // It shouldn't panic. Or we'll panic back.
-type Processor = func(ctx context.Context, m *kafka.Message)
+type Processor = func(ctx context.Context, m *events.Message)
 
 // Consumer provides easy way to process partitions with key concurrency.
 type Consumer struct {

@@ -5,19 +5,19 @@ import (
 	"hash/crc32"
 	"sync"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/events"
 	"github.com/mediakovda/go-parallel-consumer/parallel/internal/hashmap"
 )
 
-type Processor = func(ctx context.Context, m *kafka.Message)
+type Processor = func(ctx context.Context, m *events.Message)
 
 // Scheduler creates and closes partitionWorkers and
 // routes messages to them
 type Scheduler struct {
 	context   context.Context
 	processor Processor
-	offsets   chan kafka.TopicPartition
-	done      chan *kafka.Message
+	offsets   chan events.OffsetUpdate
+	done      chan *events.Message
 
 	workers *hashmap.HashMap // map[*topicPartition]*partitionWorker
 	wg      sync.WaitGroup
@@ -27,31 +27,31 @@ func NewScheduler(ctx context.Context, f Processor) *Scheduler {
 	s := &Scheduler{
 		context:   ctx,
 		processor: f,
-		offsets:   make(chan kafka.TopicPartition),
-		done:      make(chan *kafka.Message),
+		offsets:   make(chan events.OffsetUpdate),
+		done:      make(chan *events.Message),
 		workers:   hashmap.New(),
 	}
 
 	return s
 }
 
-func (s *Scheduler) Offsets() <-chan kafka.TopicPartition {
+func (s *Scheduler) Offsets() <-chan events.OffsetUpdate {
 	return s.offsets
 }
 
 // Processed returns channel with messages that are completely finished processing.
-func (s *Scheduler) Processed() <-chan *kafka.Message {
+func (s *Scheduler) Processed() <-chan *events.Message {
 	return s.done
 }
 
-func (s *Scheduler) Run(events <-chan kafka.Event) {
-	for event := range events {
+func (s *Scheduler) Run(src <-chan events.Event) {
+	for event := range src {
 		switch e := event.(type) {
-		case kafka.AssignedPartitions:
+		case events.PartitionsAssigned:
 			s.handleAssign(e)
-		case kafka.RevokedPartitions:
+		case events.PartitionsRevoked:
 			s.handleRevoke(e)
-		case *kafka.Message:
+		case *events.Message:
 			s.handleMessage(e)
 		default:
 		}
@@ -68,7 +68,7 @@ func (s *Scheduler) Run(events <-chan kafka.Event) {
 	close(s.offsets)
 }
 
-func (s *Scheduler) handleAssign(e kafka.AssignedPartitions) {
+func (s *Scheduler) handleAssign(e events.PartitionsAssigned) {
 	for _, p := range e.Partitions {
 		k := newTopicPartition(p.Topic, p.Partition)
 
@@ -79,7 +79,7 @@ func (s *Scheduler) handleAssign(e kafka.AssignedPartitions) {
 		w := newPartition(
 			s.context,
 			&partitionParams{
-				Messages:  make(chan *kafka.Message),
+				Messages:  make(chan *events.Message),
 				Processor: s.processor,
 				Offsets:   s.offsets,
 				Done:      s.done,
@@ -90,7 +90,7 @@ func (s *Scheduler) handleAssign(e kafka.AssignedPartitions) {
 	}
 }
 
-func (s *Scheduler) handleRevoke(e kafka.RevokedPartitions) {
+func (s *Scheduler) handleRevoke(e events.PartitionsRevoked) {
 	for _, p := range e.Partitions {
 		k := newTopicPartition(p.Topic, p.Partition)
 		v := s.workers.Pop(k)
@@ -103,8 +103,8 @@ func (s *Scheduler) handleRevoke(e kafka.RevokedPartitions) {
 	}
 }
 
-func (s *Scheduler) handleMessage(m *kafka.Message) {
-	k := newTopicPartition(m.TopicPartition.Topic, m.TopicPartition.Partition)
+func (s *Scheduler) handleMessage(m *events.Message) {
+	k := newTopicPartition(m.Topic, m.Partition)
 	v := s.workers.Get(k)
 	if v == nil {
 		s.done <- m
@@ -128,12 +128,12 @@ func (s *Scheduler) stopPartitionWorker(w *partitionWorker) {
 }
 
 type topicPartition struct {
-	topic     *string
-	partition int32
+	topic     string
+	partition int
 	hashCode  int
 }
 
-func newTopicPartition(topic *string, partition int32) *topicPartition {
+func newTopicPartition(topic string, partition int) *topicPartition {
 	return &topicPartition{
 		topic:     topic,
 		partition: partition,
@@ -147,8 +147,8 @@ func (k *topicPartition) Hash() int {
 
 	var h int = 7
 
-	h = 31*h + int(crc32.ChecksumIEEE([]byte(*k.topic)))
-	h = 31*h + int(k.partition)
+	h = 31*h + int(crc32.ChecksumIEEE([]byte(k.topic)))
+	h = 31*h + k.partition
 
 	if h == 0 {
 		h = 1
@@ -164,7 +164,7 @@ func (k *topicPartition) EqualTo(other interface{}) bool {
 		if k.Hash() != o.Hash() {
 			return false
 		}
-		return k.partition == o.partition && *k.topic == *o.topic
+		return k.partition == o.partition && k.topic == o.topic
 	default:
 		return false
 	}

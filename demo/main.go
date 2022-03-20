@@ -12,6 +12,7 @@ import (
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/mediakovda/go-parallel-consumer/parallel"
+	"github.com/mediakovda/go-parallel-consumer/parallel/events"
 )
 
 var (
@@ -80,7 +81,7 @@ func consume() {
 	var messages int64
 	go speedPrinter(ctx, &messages)
 
-	processor := func(ctx context.Context, m *kafka.Message) {
+	processor := func(ctx context.Context, m *events.Message) {
 		select {
 		case <-time.After(time.Duration(pdelay) * time.Millisecond):
 		case <-ctx.Done():

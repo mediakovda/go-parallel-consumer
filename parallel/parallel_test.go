@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/events"
 )
 
 func ExampleConsumer() {
-	var processor Processor = func(ctx context.Context, m *kafka.Message) {
+	var processor Processor = func(ctx context.Context, m *events.Message) {
 		defer func() {
 			if r := recover(); r != nil {
 				// you shouldn't panic in processor function
@@ -61,7 +62,7 @@ func BenchmarkConsumer(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	processor := func(ctx context.Context, m *kafka.Message) {}
+	processor := func(ctx context.Context, m *events.Message) {}
 
 	go consumer.Run(ctx, []string{}, processor, NewLimiter(NoLimits))
 
@@ -77,9 +78,9 @@ func TestConsumerRunsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	consumer.Run(ctx, nil, func(ctx context.Context, m *kafka.Message) {}, NewLimiter(NoLimits))
+	consumer.Run(ctx, nil, func(ctx context.Context, m *events.Message) {}, NewLimiter(NoLimits))
 
-	err = consumer.Run(ctx, nil, func(ctx context.Context, m *kafka.Message) {}, NewLimiter(NoLimits))
+	err = consumer.Run(ctx, nil, func(ctx context.Context, m *events.Message) {}, NewLimiter(NoLimits))
 	if err == nil || err.Error() != "Consumer.Run should be called only once" {
 		t.Errorf("runned Consumer.Run second time, you should be able to run it only once")
 	}

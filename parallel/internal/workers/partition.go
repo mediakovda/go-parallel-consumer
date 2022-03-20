@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/events"
 	"github.com/mediakovda/go-parallel-consumer/parallel/internal/hashmap"
 )
 
@@ -13,11 +13,11 @@ type partitionWorker struct {
 	context context.Context
 	cancel  context.CancelFunc
 
-	Messages  chan *kafka.Message
+	Messages  chan *events.Message
 	processor Processor
-	done      chan<- *kafka.Message
+	done      chan<- *events.Message
 
-	offsets       chan<- kafka.TopicPartition
+	offsets       chan<- events.OffsetUpdate
 	offsetTracker *offsetTracker
 
 	jobs    *hashmap.HashMap // map[*jobKey]*job
@@ -26,11 +26,11 @@ type partitionWorker struct {
 }
 
 type partitionParams struct {
-	Messages  chan *kafka.Message
+	Messages  chan *events.Message
 	Processor Processor
 
-	Offsets chan<- kafka.TopicPartition
-	Done    chan<- *kafka.Message
+	Offsets chan<- events.OffsetUpdate
+	Done    chan<- *events.Message
 }
 
 func newPartition(ctx context.Context, p *partitionParams) *partitionWorker {
@@ -78,10 +78,10 @@ func (w *partitionWorker) Close() {
 	close(w.Messages)
 }
 
-func (w *partitionWorker) handleMessage(m *kafka.Message) {
+func (w *partitionWorker) handleMessage(m *events.Message) {
 	// we can only find out initial offset in first message
 	if w.offsetTracker == nil {
-		w.offsetTracker = newOffsetTracker(int(m.TopicPartition.Offset))
+		w.offsetTracker = newOffsetTracker(int(m.Offset))
 	}
 
 	k := newJobKey(m.Key)
@@ -105,7 +105,7 @@ func (w *partitionWorker) handleJobDone(j *job) {
 		return
 	}
 
-	w.updateOffset(j.current.TopicPartition)
+	w.updateOffset(j.current)
 
 	nextJob := j.next()
 
@@ -117,13 +117,13 @@ func (w *partitionWorker) handleJobDone(j *job) {
 	w.startJob(nextJob)
 }
 
-func (w *partitionWorker) updateOffset(t kafka.TopicPartition) {
-	move, _ := w.offsetTracker.Mark(int(t.Offset))
+func (w *partitionWorker) updateOffset(m *events.Message) {
+	move, _ := w.offsetTracker.Mark(int(m.Offset))
 	if move != -1 {
-		o := kafka.TopicPartition{
-			Topic:     t.Topic,
-			Partition: t.Partition,
-			Offset:    kafka.Offset(move),
+		o := events.OffsetUpdate{
+			Topic:     m.Topic,
+			Partition: m.Partition,
+			Offset:    int64(move),
 		}
 		w.offsets <- o
 	}

@@ -5,10 +5,11 @@ import (
 	"log"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/events"
 )
 
 type kafkaPoller struct {
-	events   chan kafka.Event
+	events   chan events.Event
 	consumer kafkaConsumer
 	topics   []string
 
@@ -29,7 +30,7 @@ type kafkaConsumer interface {
 
 func newKafkaPoller(c kafkaConsumer, topics []string, config *Config) (*kafkaPoller, error) {
 	p := &kafkaPoller{
-		events:        make(chan kafka.Event),
+		events:        make(chan events.Event),
 		consumer:      c,
 		topics:        topics,
 		logger:        config.Logger,
@@ -39,7 +40,7 @@ func newKafkaPoller(c kafkaConsumer, topics []string, config *Config) (*kafkaPol
 	return p, nil
 }
 
-func (p *kafkaPoller) Events() <-chan kafka.Event {
+func (p *kafkaPoller) Events() <-chan events.Event {
 	return p.events
 }
 
@@ -98,11 +99,25 @@ func (p *kafkaPoller) rebalance(c *kafka.Consumer, e kafka.Event) error {
 }
 
 func (p *kafkaPoller) handleEvent(e kafka.Event) {
-	var send kafka.Event
+	var send events.Event
 
 	switch e := e.(type) {
 	case *kafka.Message:
-		send = e
+		headers := make([]events.Header, len(e.Headers))
+		for i := 0; i < len(e.Headers); i++ {
+			headers[i] = events.Header{
+				Key:   e.Headers[i].Key,
+				Value: e.Headers[i].Value,
+			}
+		}
+		send = &events.Message{
+			Topic:     *e.TopicPartition.Topic,
+			Partition: int(e.TopicPartition.Partition),
+			Offset:    int64(e.TopicPartition.Offset),
+			Key:       e.Key,
+			Value:     e.Value,
+			Headers:   headers,
+		}
 
 	case kafka.Error:
 		p.logger.Println("kafka.Error", e)
@@ -112,13 +127,28 @@ func (p *kafkaPoller) handleEvent(e kafka.Event) {
 		if err != nil {
 			p.logger.Println("kafka.AssignedPartitions", err)
 		}
-		send = e
+		partitions := make([]events.TopicPartition, len(e.Partitions))
+		for i := 0; i < len(partitions); i++ {
+			partitions[i] = events.TopicPartition{
+				Topic:     *e.Partitions[i].Topic,
+				Partition: int(e.Partitions[i].Partition),
+			}
+		}
+		send = events.PartitionsAssigned{Partitions: partitions}
+
 	case kafka.RevokedPartitions:
 		err := p.consumer.IncrementalUnassign(e.Partitions)
 		if err != nil {
 			p.logger.Println("kafka.RevokedPartitions", err)
 		}
-		send = e
+		partitions := make([]events.TopicPartition, len(e.Partitions))
+		for i := 0; i < len(partitions); i++ {
+			partitions[i] = events.TopicPartition{
+				Topic:     *e.Partitions[i].Topic,
+				Partition: int(e.Partitions[i].Partition),
+			}
+		}
+		send = events.PartitionsRevoked{Partitions: partitions}
 
 	default:
 	}
@@ -128,9 +158,14 @@ func (p *kafkaPoller) handleEvent(e kafka.Event) {
 	}
 }
 
-func (p *kafkaPoller) RunOffsets(offsets <-chan kafka.TopicPartition) {
+func (p *kafkaPoller) RunOffsets(offsets <-chan events.OffsetUpdate) {
 	for o := range offsets {
-		_, err := p.consumer.StoreOffsets([]kafka.TopicPartition{o})
+		topicPartition := kafka.TopicPartition{
+			Topic:     &o.Topic,
+			Partition: int32(o.Partition),
+			Offset:    kafka.Offset(o.Offset),
+		}
+		_, err := p.consumer.StoreOffsets([]kafka.TopicPartition{topicPartition})
 
 		if err != nil {
 			p.logger.Printf("offsetLoop, consumer.StoreOffsets: %v\n", err)

@@ -6,46 +6,46 @@ import (
 	"testing"
 	"time"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/events"
 )
 
 func TestSchedulerRouting(t *testing.T) {
 	n := 999
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	events := make(chan kafka.Event, n)
-	done := make(chan *kafka.Message, n)
-	s := NewScheduler(ctx, func(ctx context.Context, m *kafka.Message) {})
+	src := make(chan events.Event, n)
+	done := make(chan *events.Message, n)
+	s := NewScheduler(ctx, func(ctx context.Context, m *events.Message) {})
 	s.done = done
-	s.offsets = make(chan kafka.TopicPartition, n)
+	s.offsets = make(chan events.OffsetUpdate, n)
 
 	topic, topic2 := "topic", "topic2"
-	p1 := kafka.TopicPartition{Topic: &topic, Partition: 1}
-	p3 := kafka.TopicPartition{Topic: &topic, Partition: 3}
-	s.handleAssign(kafka.AssignedPartitions{Partitions: []kafka.TopicPartition{p1, p3}})
+	p1 := events.TopicPartition{Topic: topic, Partition: 1}
+	p3 := events.TopicPartition{Topic: topic, Partition: 3}
+	s.handleAssign(events.PartitionsAssigned{Partitions: []events.TopicPartition{p1, p3}})
 
-	w1 := s.workers.Get(newTopicPartition(&topic, 1)).(*partitionWorker)
-	w1messages := make(chan *kafka.Message, n)
+	w1 := s.workers.Get(newTopicPartition(topic, 1)).(*partitionWorker)
+	w1messages := make(chan *events.Message, n)
 	expected := 0
-	w1.processor = func(ctx context.Context, m *kafka.Message) {
+	w1.processor = func(ctx context.Context, m *events.Message) {
 		w1messages <- m
 	}
 
-	go s.Run(events)
+	go s.Run(src)
 
 	for i := 0; i < n; i++ {
-		var t *string
+		var t string
 		if rand.Float64() < 0.5 {
-			t = &topic
+			t = topic
 		} else {
-			t = &topic2
+			t = topic2
 		}
-		m := &kafka.Message{TopicPartition: kafka.TopicPartition{Topic: t, Partition: int32(i % 10)}}
-		if m.TopicPartition.Topic == &topic && m.TopicPartition.Partition == 1 {
+		m := &events.Message{Topic: t, Partition: i % 10}
+		if m.Topic == topic && m.Partition == 1 {
 			expected += 1
 		}
 
-		events <- m
+		src <- m
 		<-done
 	}
 
@@ -53,7 +53,7 @@ func TestSchedulerRouting(t *testing.T) {
 	close(w1messages)
 	for m := range w1messages {
 		received += 1
-		if m.TopicPartition.Topic != &topic || m.TopicPartition.Partition != 1 {
+		if m.Topic != topic || m.Partition != 1 {
 			t.Errorf("w1 got message that belong to different partition: %v", m)
 		}
 	}
@@ -66,20 +66,20 @@ func TestSchedulerRouting(t *testing.T) {
 // runPartitionWorker should collect unprocessed messages and send them to .done
 func TestRunPartitionWorker(t *testing.T) {
 	n := 999
-	done := make(chan *kafka.Message, n)
+	done := make(chan *events.Message, n)
 	s := &Scheduler{done: done}
 
 	w := newPartition(
 		context.Background(),
 		&partitionParams{
-			Messages:  make(chan *kafka.Message, n),
-			Processor: func(ctx context.Context, m *kafka.Message) {},
-			Offsets:   make(chan<- kafka.TopicPartition, n),
+			Messages:  make(chan *events.Message, n),
+			Processor: func(ctx context.Context, m *events.Message) {},
+			Offsets:   make(chan<- events.OffsetUpdate, n),
 			Done:      done,
 		})
 
 	for i := 0; i < n; i++ {
-		w.Messages <- &kafka.Message{}
+		w.Messages <- &events.Message{}
 	}
 
 	s.wg.Add(1)
@@ -92,16 +92,14 @@ func TestRunPartitionWorker(t *testing.T) {
 }
 
 func TestTopicPartition(t *testing.T) {
-	name0, name1 := "name", "name"
-	t0 := newTopicPartition(&name0, 0)
-	t1 := newTopicPartition(&name1, 0)
+	t0 := newTopicPartition("name", 0)
+	t1 := newTopicPartition("name", 0)
 
 	if t0.Hash() != t1.Hash() {
 		t.Errorf("equal keys has different hashes %d %d, want the same", t0.Hash(), t1.Hash())
 	}
 
-	name1 = "different"
-	t1 = newTopicPartition(&name1, 0)
+	t1 = newTopicPartition("different", 0)
 	t1.hashCode = t0.hashCode
 
 	if t0.EqualTo(t1) {

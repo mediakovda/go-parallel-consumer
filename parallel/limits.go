@@ -3,7 +3,7 @@ package parallel
 import (
 	"math"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/events"
 	"github.com/mediakovda/go-parallel-consumer/parallel/internal/limiter"
 )
 
@@ -40,6 +40,6 @@ func (l Limiter) SetLimits(limits Limits) {
 	})
 }
 
-func (l Limiter) limit(input <-chan kafka.Event, processed <-chan *kafka.Message) (output <-chan kafka.Event) {
+func (l Limiter) limit(input <-chan events.Event, processed <-chan *events.Message) (output <-chan events.Event) {
 	return l.limiter.Start(input, processed)
 }

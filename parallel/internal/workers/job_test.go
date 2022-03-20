@@ -4,21 +4,21 @@ import (
 	"context"
 	"testing"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/events"
 )
 
 func TestJobRun(t *testing.T) {
-	m := &kafka.Message{}
+	m := &events.Message{}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	j := newJob(nil, m)
-	j.run(ctx, func(ctx context.Context, m *kafka.Message) {})
+	j.run(ctx, func(ctx context.Context, m *events.Message) {})
 	if j.err != nil {
 		t.Errorf("job failed, want not failed")
 	}
 
 	j = newJob(nil, m)
-	j.run(ctx, func(ctx context.Context, m *kafka.Message) {
+	j.run(ctx, func(ctx context.Context, m *events.Message) {
 		panic("")
 	})
 	if j.err == nil {
@@ -27,24 +27,24 @@ func TestJobRun(t *testing.T) {
 
 	cancel()
 	j = newJob(nil, m)
-	j.run(ctx, func(ctx context.Context, m *kafka.Message) {})
+	j.run(ctx, func(ctx context.Context, m *events.Message) {})
 	if j.err == nil {
 		t.Errorf("job not failed, want failed")
 	}
 
 	j = newJob(nil, nil)
-	j.run(ctx, func(ctx context.Context, m *kafka.Message) {})
+	j.run(ctx, func(ctx context.Context, m *events.Message) {})
 	if j.err == nil {
 		t.Errorf("job with .current = nil isn't failed, want failed")
 	}
 }
 
 func TestNext(t *testing.T) {
-	m0 := &kafka.Message{}
-	m1 := &kafka.Message{}
+	m0 := &events.Message{}
+	m1 := &events.Message{}
 
 	j := newJob(nil, m0)
-	j.run(context.Background(), func(ctx context.Context, m *kafka.Message) {
+	j.run(context.Background(), func(ctx context.Context, m *events.Message) {
 		panic("")
 	})
 

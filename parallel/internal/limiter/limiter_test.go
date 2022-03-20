@@ -5,17 +5,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/mediakovda/go-parallel-consumer/parallel/internal/events"
 )
 
 func TestLimiterMessages(t *testing.T) {
 	l := New(Limits{MaxMessages: 1, MaxBytes: math.MaxInt64})
-	events := make(chan kafka.Event, 2)
-	events <- &kafka.Message{}
-	events <- &kafka.Message{}
-	processed := make(chan *kafka.Message)
+	src := make(chan events.Event, 2)
+	src <- &events.Message{}
+	src <- &events.Message{}
+	processed := make(chan *events.Message)
 
-	out := l.Start(events, processed)
+	out := l.Start(src, processed)
 
 	<-out
 
@@ -23,7 +23,7 @@ func TestLimiterMessages(t *testing.T) {
 		t.Errorf("not limited(), want limited()")
 	}
 
-	processed <- &kafka.Message{}
+	processed <- &events.Message{}
 
 	select {
 	case <-out:
@@ -36,12 +36,12 @@ func TestLimiterMessages(t *testing.T) {
 func TestLimiterMessageBytes(t *testing.T) {
 	l := New(Limits{MaxMessages: math.MaxInt64, MaxBytes: 1})
 
-	events := make(chan kafka.Event, 2)
-	events <- &kafka.Message{Value: []byte{0}}
-	events <- &kafka.Message{Value: []byte{0}}
-	processed := make(chan *kafka.Message)
+	src := make(chan events.Event, 2)
+	src <- &events.Message{Value: []byte{0}}
+	src <- &events.Message{Value: []byte{0}}
+	processed := make(chan *events.Message)
 
-	out := l.Start(events, processed)
+	out := l.Start(src, processed)
 
 	<-out
 
@@ -49,7 +49,7 @@ func TestLimiterMessageBytes(t *testing.T) {
 		t.Errorf("not limited(), want limited()")
 	}
 
-	processed <- &kafka.Message{Value: []byte{0}}
+	processed <- &events.Message{Value: []byte{0}}
 
 	select {
 	case <-out:
@@ -60,8 +60,8 @@ func TestLimiterMessageBytes(t *testing.T) {
 }
 
 func TestMessageSize(t *testing.T) {
-	m := &kafka.Message{
-		Headers: []kafka.Header{{Key: "h", Value: make([]byte, 10)}},
+	m := &events.Message{
+		Headers: []events.Header{{Key: "h", Value: make([]byte, 10)}},
 		Key:     make([]byte, 100),
 		Value:   make([]byte, 1000),
 	}
@@ -71,7 +71,7 @@ func TestMessageSize(t *testing.T) {
 		t.Errorf("message size = %d, want 1111", size)
 	}
 
-	m = &kafka.Message{}
+	m = &events.Message{}
 
 	size = messageSize(m)
 	if size != 0 {
